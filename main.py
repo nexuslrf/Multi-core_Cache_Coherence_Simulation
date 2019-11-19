@@ -50,6 +50,8 @@ class Simulator:
             continue
 
         print("All Finished! Current counter: {}".format(self.counter))
+        for proc in self.procs:
+            print('processsor {0} counter: {1}'.format(proc.index, proc.counter))
 
     def tick(self):
         """

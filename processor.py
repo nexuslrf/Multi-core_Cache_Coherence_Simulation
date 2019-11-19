@@ -9,6 +9,7 @@ class Processor:
         self.op_stream = None
         self.cache = None
         self.done = False
+        self.counter = 0
 
     def interim(self):
         """
@@ -46,7 +47,10 @@ class Processor:
         return self.current_job is not None
 
     def tick(self):
-        if self.current_job is not None:
+        if self.done:
+            return
+        if self.is_busy():
             self.current_job.countdown_cycles -= 1
             if self.current_job.countdown_cycles < 1:
                 self.current_job = None
+        self.counter += 1
