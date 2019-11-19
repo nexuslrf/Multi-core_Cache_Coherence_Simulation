@@ -1,4 +1,6 @@
+from main import Simulator
 from mesicachecontroller import MesiCacheController
+from opstream import OpStream
 from util import resolve_memory_address
 import pytest
 
@@ -18,3 +20,9 @@ def test_cache_controller_init():
     assert cache.offset_mask == 0b11111
     assert cache.m == 6
     assert cache.n == 5
+
+
+def test_cpu_only_job():
+    simulator = Simulator()
+    simulator.run()
+    assert simulator.counter == 0x27 * 3

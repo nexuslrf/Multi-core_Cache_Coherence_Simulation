@@ -4,7 +4,7 @@ from constants.cache import *
 class Job:
     def __init__(self, job_type, address=None, remaining_cycles=None):
         self.address = address
-        self.type = 0
+        self.type = job_type
         self.countdown_cycles = remaining_cycles
 
     @staticmethod
