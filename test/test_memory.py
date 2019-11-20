@@ -41,12 +41,14 @@ def test_fetch_block_from_memory():
     for _ in range(50):
         mc.tick()
     assert r0.fetched_block is not None
+    r0.reset()
     assert r1.fetched_block is None
     assert r2.fetched_block is None
     for _ in range(50):
         mc.tick()
     assert r1.fetched_block is not None
     assert r2.fetched_block is not None
+    assert r0.fetched_block is None
 
 
 def test_evict_block_to_memory():
@@ -71,12 +73,14 @@ def test_evict_block_to_memory():
     for _ in range(50):
         mc.tick()
     assert r0.evicted_block is not None
+    r0.reset()
     assert r1.evicted_block is None
     assert r2.evicted_block is None
     for _ in range(50):
         mc.tick()
     assert r1.evicted_block is not None
     assert r2.evicted_block is not None
+    assert r0.evicted_block is None
 
 
 def test_interleaving_evict_and_fetch_memory():
