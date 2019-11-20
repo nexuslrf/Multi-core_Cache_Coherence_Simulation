@@ -1,7 +1,8 @@
 import os
 
+from components.dragoncache import DragonCache
 from components.mesibus import Bus
-from components.mesicachecontroller import MesiCacheController
+from components.mesicache import MesiCache
 from opstream import OpStream
 from components.processor import Processor
 
@@ -9,9 +10,9 @@ from components.processor import Processor
 def create_proc(i, protocol, **kwargs):
     proc = Processor(i, **kwargs)
     if protocol == 'mesi':
-        proc.cache = MesiCacheController(name='P' + str(i), **kwargs)
-    # if protocol == 'dragon':
-    #     proc.cache = DragonCacheController(name='P' + i, **kwargs)
+        proc.cache = MesiCache(name='P' + str(i), **kwargs)
+    if protocol == 'dragon':
+        proc.cache = DragonCache(name='P' + str(i), **kwargs)
     return proc
 
 

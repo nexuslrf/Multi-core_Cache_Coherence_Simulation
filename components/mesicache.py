@@ -11,7 +11,7 @@ from job import CacheJob
 from util import resolve_memory_address
 
 
-class MesiCacheController(CacheBase):
+class MesiCache(CacheBase):
     def __init__(self, name, size=4096, assoc=2, block_size=32, memory_controller=None, bus=None):
         super().__init__(name, size, assoc, block_size, memory_controller, bus)
 

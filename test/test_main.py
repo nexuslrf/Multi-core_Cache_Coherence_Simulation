@@ -1,5 +1,5 @@
 from main import Simulator
-from components.mesicachecontroller import MesiCacheController
+from components.mesicache import MesiCache
 from util import resolve_memory_address
 import pytest
 
@@ -14,7 +14,7 @@ def test_memory_resolution(address, expected):
 
 
 def test_cache_controller_init():
-    cache = MesiCacheController('P1', 4096, 2, 32)
+    cache = MesiCache('P1', 4096, 2, 32)
     assert cache.set_index_mask == 0b11111100000
     assert cache.offset_mask == 0b11111
     assert cache.m == 6
