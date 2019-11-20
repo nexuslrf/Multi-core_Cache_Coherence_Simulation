@@ -75,12 +75,12 @@ class MesiCache(CacheBase):
             if not result:
                 self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
             elif payload_words:  # result comes with payload, data will be supplied by one of other caches
-                self.set_block_state(self.current_job.address, EXCLUSIVE)
+                self.reserve_space_for_incoming_block(self.current_job.address, SHARED)
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
                 self.bus.release_ownership(self)
-                self.reserve_space_for_block(self.current_job.address, EXCLUSIVE)
+                self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
 
@@ -98,10 +98,6 @@ class MesiCache(CacheBase):
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
 
-    def on_bus_read_finished(self):
-        self.bus.release_ownership(self)  # throws exception if self is not current bus owner!
-        self.start_hitting()
-
     def unlock_block(self, address):
         tag, set_index, offset = self.resolve_memory_address(address)
         for block in self.data[set_index]:
@@ -111,7 +107,10 @@ class MesiCache(CacheBase):
     def start_hitting(self):
         tag, set_index, _ = self.resolve_memory_address(self.current_job.address)
         self.update_cache_set_access_order(set_index, tag)
-
+        if self.current_job.type == LOAD:
+            self.lock_block(self.current_job.address, READ_LOCKED)
+        if self.current_job.type == STORE:
+            self.lock_block(self.current_job.address, WRITE_LOCKED)
         self.current_job.status_in_cache = HITTING
 
     def on_hit_finished(self):
@@ -136,34 +135,12 @@ class MesiCache(CacheBase):
 
         raise LookupError("[lock_block] block not found in cache")
 
-    def on_fetch_from_memory_finished(self):
-        if self.current_job.type == LOAD:
-            state = EXCLUSIVE
-        else:
-            state = MODIFIED
-        self.set_block_state(self.current_job.address, state)
+    def on_bus_read_finished(self):
+        self.bus.release_ownership(self)  # throws exception if self is not current bus owner!
         self.start_hitting()
 
-    def allocate_block(self, address):
-        # check if block exists in cache
-        tag, set_index, offset = self.resolve_memory_address(address)
-        for block in self.data[set_index]:
-            if block[0] == tag:
-                return
-
-        # if not exist choose first empty/invalid block
-        # write tag of address to that block
-        for block in self.data[set_index]:
-            if block[1] == INVALID:
-                old_tag = block[0]
-                block[0] = tag
-                return
-
-        # otherwise, have to evict existing block
-        old_tag = self.access_history[set_index].popleft()
-        self.access_history[set_index].append(tag)
-        evict_address = old_tag<<(self.m+self.n) + set_index << self.n + offset
-        self.memory_controller.evict_block(self, evict_address)
+    def on_fetch_from_memory_finished(self):
+        self.start_hitting()
 
     def bus_read(self, address):
         """
@@ -178,5 +155,34 @@ class MesiCache(CacheBase):
                 return False, 0
             if block[1] == SHARED:
                 return True, self.block_size//4
-        else:
-            return True, 0
+            if block[1] == EXCLUSIVE:
+                block[1] = SHARED
+                return True, self.block_size//4
+            if block[1] == MODIFIED:
+                self.evict_block(block)
+                block[1] = SHARED
+                return True, self.block_size//4
+            if block[1] == INVALID:
+                return True, 0
+
+        return True, 0
+
+    def bus_readx(self, address):
+        block = self.get_cache_block(address)
+        if block is not None:
+            if block[2] > READ_LOCKED:
+                return False, 0
+            if block[1] == SHARED:
+                block[1] = INVALID
+                return True, self.block_size // 4
+            if block[1] == EXCLUSIVE:
+                block[1] = INVALID
+                return True, self.block_size // 4
+            if block[1] == MODIFIED:
+                self.evict_block(block)
+                block[1] = INVALID
+                return True, self.block_size // 4
+            if block[1] == INVALID:
+                return True, 0
+
+        return True, 0

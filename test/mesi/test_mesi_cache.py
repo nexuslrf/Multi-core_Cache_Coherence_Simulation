@@ -98,7 +98,7 @@ def test_reserve_space_for_block(cache_assoc_4:MesiCache, cache_set_array, expec
     cache_assoc_4.memory_controller = mc
     cache_assoc_4.data[1] = np.matrix(cache_set_array)
     address = cache_assoc_4.get_address_from_pieces(1, 1, 1)
-    cache_assoc_4.reserve_space_for_block(address, EXCLUSIVE)
+    cache_assoc_4.reserve_space_for_incoming_block(address, EXCLUSIVE)
     assert np.array_equal(cache_assoc_4.data[1], expected)
 
 
@@ -135,12 +135,46 @@ def test_cache_direct_hit_only():
     assert simulator.counter == len(op_list)
 
 
-def test_cache_miss_fetch_from_memory():
+def test_cache_fetch_from_memory_only():
     op_list = [(0, 0b100000100001), (0, 0b1000000110000), (0, 0b1100000100111), (0, 0b10000000110011)]
-    simulator = Simulator(data=None, num_cores=1)
+    op_list1 = [(0, 0b100001100001), (0, 0b1000001110000), (0, 0b1100001100111), (0, 0b10000001110011)]
+    simulator = Simulator(data=None, num_cores=2)
     simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
     simulator.run()
-    assert simulator.counter == len(op_list) * 101
+    assert simulator.counter == len(op_list) * 101 + 1  # the extra 1 cycle is spent competing for bus ownership
+
+
+@pytest.mark.parametrize(
+    "cache_set_array, number_of_mem_access, dest_block_states",
+    [
+        ([[11, SHARED, 0],
+          [22, SHARED, 0]], 0, [SHARED, SHARED]
+         ),
+        ([[11, SHARED, 0],
+          [33, SHARED, 0]], 1, [EXCLUSIVE, SHARED]
+         ),
+        ([[11, SHARED, 0],
+          [22, INVALID, 0]], 1, [EXCLUSIVE, SHARED]
+         ),
+        ([[11, MODIFIED, 0],
+          [22, EXCLUSIVE, 0]], 0, [SHARED, SHARED]
+         )
+    ]
+)
+def test_cache_fetch_from_bus_only(cache_set_array, number_of_mem_access, dest_block_states):
+    op_list_raw = [(0, 11, 1, 1), (0, 22, 1, 1)]
+    op_list1 = []
+    simulator = Simulator(data=None, num_cores=2)
+    op_list = [(x[0], simulator.procs[0].cache.get_address_from_pieces(*x[1:])) for x in op_list_raw]
+
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.procs[1].cache.data[1] = np.matrix(cache_set_array)
+    simulator.run()
+    assert np.array_equal(simulator.procs[0].cache.data[1][:,1], dest_block_states)
+    assert simulator.counter == (len(op_list) - number_of_mem_access) * (2*simulator.procs[0].cache.block_size // 4 + 1) + number_of_mem_access * 101
+
 
 def dummy_callback(result):
     return
@@ -155,3 +189,14 @@ def test_cache_compete_for_bus_ownership(cache_0, cache_1, bus):
     assert bus.bus_master is None
     bus.interim()
     assert bus.bus_master == cache_0
+
+
+def test_cache_read_block_while_other_cache_fetching_same_block_from_mem():
+    op_list = [(0, 0b100000100001), (0, 0b1000000110000), (0, 0b1100000100111), (0, 0b10000000110011)]
+    op_list1 = [(2, 10), (0, 0b100000100001)]
+    simulator = Simulator(data=None, num_cores=2)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.run()
+    assert simulator.procs[1].counter == 100+simulator.procs[1].cache.block_size//4*2 + 1
+    assert simulator.counter == 100+simulator.procs[1].cache.block_size//4*2 + (len(op_list) - 1)*101
