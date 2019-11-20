@@ -51,7 +51,6 @@ class MesiCache(CacheBase):
 
     def bus_control_granted(self, result):
         if result:  # bus ownership granted
-            self.allocate_block(self.current_job.address)
             self.send_job_specific_bus_request()
         else:  # bus ownership rejected
             return  # start over next time
@@ -80,8 +79,8 @@ class MesiCache(CacheBase):
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
-                self.set_block_state(self.current_job.address, EXCLUSIVE)
-                self.lock_block(self.current_job.address)
+                self.bus.release_ownership(self)
+                self.reserve_space_for_block(self.current_job.address, EXCLUSIVE)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
 
@@ -138,6 +137,11 @@ class MesiCache(CacheBase):
         raise LookupError("[lock_block] block not found in cache")
 
     def on_fetch_from_memory_finished(self):
+        if self.current_job.type == LOAD:
+            state = EXCLUSIVE
+        else:
+            state = MODIFIED
+        self.set_block_state(self.current_job.address, state)
         self.start_hitting()
 
     def allocate_block(self, address):
@@ -162,7 +166,17 @@ class MesiCache(CacheBase):
         self.memory_controller.evict_block(self, evict_address)
 
     def bus_read(self, address):
+        """
+
+        :param address:
+        :return: tuple(Boolean, Int) Boolean value is False if the block is available but being locked, otherwise True
+        Int value is the payload size if the block is available and ready to be transmitted, or 0 if block not found.
+        """
         block = self.get_cache_block(address)
         if block is not None:
+            if block[2] > READ_LOCKED:
+                return False, 0
             if block[1] == SHARED:
                 return True, self.block_size//4
+        else:
+            return True, 0

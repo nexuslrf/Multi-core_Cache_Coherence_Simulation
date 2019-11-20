@@ -123,3 +123,34 @@ class CacheBase:
         cache_set_temp = cache_set[new_order]
         for i in current_order:
             cache_set[i] = cache_set_temp[i]
+
+    def reserve_space_for_block(self, address, state):
+        """
+        make sure the cache set for address has available slot (i.e. invalid block),
+        otherwise have to evict the least recently accessed block.
+        :param address:
+        :return:
+        """
+        tag, set_index, offset = self.resolve_memory_address(address)
+        target_block = None
+        for block in self.data[set_index]:
+            if block[1] == INVALID:
+                target_block = block
+
+        if target_block is None:
+            self.evict_block(self.data[set_index][-1])
+            target_block = self.data[set_index][-1]
+
+        target_block[0] = tag
+        target_block[1] = state
+        target_block[2] = WRITE_LOCKED
+
+    def evict_block(self, block):
+        pass
+
+    def get_address_from_pieces(self, tag, cache_set_index, block_offset=0):
+        address = block_offset
+        tag = tag << self.m + self.n
+        index = cache_set_index << self.n
+        address = address | tag | index
+        return address
