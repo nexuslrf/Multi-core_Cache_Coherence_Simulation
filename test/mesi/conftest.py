@@ -1,7 +1,7 @@
 import pytest
 
-from mesibus import Bus
-from mesicachecontroller import MesiCacheController
+from components.mesibus import Bus
+from components.mesicachecontroller import MesiCacheController
 
 
 @pytest.fixture
@@ -13,6 +13,12 @@ def cache_0():
 @pytest.fixture
 def cache_1():
     cache = MesiCacheController('P1')
+    return cache
+
+
+@pytest.fixture
+def cache_assoc_4():
+    cache = MesiCacheController('P1', assoc=4)
     return cache
 
 

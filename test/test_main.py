@@ -1,6 +1,5 @@
 from main import Simulator
-from mesicachecontroller import MesiCacheController
-from opstream import OpStream
+from components.mesicachecontroller import MesiCacheController
 from util import resolve_memory_address
 import pytest
 

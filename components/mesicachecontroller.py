@@ -1,8 +1,8 @@
-from collections import deque
 from math import log
 
 import numpy as np
 
+from components.cachebase import CacheBase
 from constants.cache import *
 from constants.jobtype import *
 from constants.locking import *
@@ -11,49 +11,9 @@ from job import CacheJob
 from util import resolve_memory_address
 
 
-class MesiCacheController:
+class MesiCacheController(CacheBase):
     def __init__(self, name, size=4096, assoc=2, block_size=32, memory_controller=None, bus=None):
-        self.name = name
-        self.current_job = None
-        self.size = size
-        self.assoc = assoc
-        self.block_size = block_size
-        self.n = int(log(block_size, 2))
-        self.m = int(log(size / assoc / block_size, 2))
-        self.set_index_mask = 0
-        for _ in range(self.m):
-            self.set_index_mask = (self.set_index_mask << 1) | 0b1
-        for _ in range(self.n):
-            self.set_index_mask = self.set_index_mask << 1
-        self.offset_mask = 0
-        for _ in range(self.n):
-            self.offset_mask = (self.offset_mask << 1) | 0b1
-        self.data = np.zeros((size // assoc // block_size, assoc, 3), dtype=int)
-        self.access_history = {}  # {set_index: deque[]}
-        self.memory_controller = memory_controller
-        self.bus = bus
-
-        self.job = None
-
-    def is_busy(self):
-        return self.current_job is not None
-
-    def tick(self):
-        if self.current_job is None:
-            return
-        else:
-            if self.current_job.status_in_cache == RECEIVING_FROM_BUS:
-                self.current_job.remaining_bus_read_cycles -= 1
-                if self.current_job.remaining_bus_read_cycles < 1:
-                    self.on_bus_read_finished()
-                return
-
-            if self.current_job.status_in_cache == HITTING:
-                self.on_hit_finished()
-                return
-
-    def schedule_job(self, job):
-        self.current_job = CacheJob.create_from_job(job, self.n)
+        super().__init__(name, size, assoc, block_size, memory_controller, bus)
 
     def interim(self):
         # run interim stuff if there is a current job
@@ -150,6 +110,9 @@ class MesiCacheController:
                 block[2] = UNLOCKED
 
     def start_hitting(self):
+        tag, set_index, _ = self.resolve_memory_address(self.current_job.address)
+        self.update_cache_set_access_order(set_index, tag)
+
         self.current_job.status_in_cache = HITTING
 
     def on_hit_finished(self):
@@ -197,16 +160,6 @@ class MesiCacheController:
         self.access_history[set_index].append(tag)
         evict_address = old_tag<<(self.m+self.n) + set_index << self.n + offset
         self.memory_controller.evict_block(self, evict_address)
-
-    def resolve_memory_address(self, address):
-        return resolve_memory_address(address, self.set_index_mask, self.offset_mask, self.m, self.n)
-
-    def update_access_history(self, address):
-        tag, set_index, offset = self.resolve_memory_address(address)
-        set_history = self.access_history.setdefault(set_index, deque(self.assoc*[0], self.assoc))
-        if tag in set_history:
-            set_history.remove(tag)
-        set_history.append(tag)
 
     def bus_read(self, address):
         block = self.get_cache_block(address)

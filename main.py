@@ -1,9 +1,9 @@
 import os
 
-from mesibus import Bus
-from mesicachecontroller import MesiCacheController
+from components.mesibus import Bus
+from components.mesicachecontroller import MesiCacheController
 from opstream import OpStream
-from processor import Processor
+from components.processor import Processor
 
 
 def create_proc(i, protocol, **kwargs):
@@ -22,10 +22,10 @@ def connect_bus(procs, bus):
     return bus
 
 
-def create_opstream(data_name):
+def create_opstream(data_name, num_cores):
     dir_path = './data/{}/'.format(data_name)
     result = []
-    for i in range(4):
+    for i in range(num_cores):
         for file in os.listdir(dir_path):
             if str(i) in file:
                 opstream = OpStream(dir_path+file)
@@ -34,12 +34,13 @@ def create_opstream(data_name):
 
 
 class Simulator:
-    def __init__(self, protocol='mesi', data='blackscholes_four', *args, **kwargs):
+    def __init__(self, protocol='mesi', data='blackscholes_four', num_cores=4, *args, **kwargs):
         # setup processors with caches
-        self.procs = [create_proc(i, protocol, **kwargs) for i in range(4)]
+        self.procs = [create_proc(i, protocol, **kwargs) for i in range(num_cores)]
         # setup op stream for each processor
-        for proc, opstream in zip(self.procs, create_opstream(data)):
-            proc.op_stream = opstream
+        if data:
+            for proc, opstream in zip(self.procs, create_opstream(data, num_cores)):
+                proc.op_stream = opstream
         # setup bus
         self.bus = connect_bus(self.procs, Bus())
         # cycle counter

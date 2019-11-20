@@ -1,3 +1,18 @@
+class FakeOpStream:
+    def __init__(self, op_list):
+        self.op_iterator = iter(op_list)
+
+    def read_op(self):
+        try:
+            opcode, value = next(self.op_iterator)
+            return opcode, value
+        except StopIteration:
+            return None
+
+    def close(self):
+        pass
+
+
 class OpStream:
     def __init__(self, file):
         self.file = open(file)

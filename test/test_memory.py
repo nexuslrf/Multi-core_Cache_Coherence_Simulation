@@ -1,4 +1,4 @@
-from memorycontroller import MemoryController
+from components.memorycontroller import MemoryController
 
 
 class SimpleRequester:

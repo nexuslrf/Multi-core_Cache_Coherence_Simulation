@@ -1,5 +1,4 @@
 from job import Job
-from mesicachecontroller import MesiCacheController
 
 
 class Processor:
