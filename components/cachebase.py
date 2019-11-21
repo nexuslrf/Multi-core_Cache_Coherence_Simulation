@@ -124,10 +124,11 @@ class CacheBase:
         for i in current_order:
             cache_set[i] = cache_set_temp[i]
 
-    def reserve_space_for_block(self, address, state):
+    def reserve_space_for_incoming_block(self, address, state):
         """
-        make sure the cache set for address has available slot (i.e. invalid block),
-        otherwise have to evict the least recently accessed block.
+        find an available block slot for <address> in the corresponding cache_set, if the cache_set is full, i.e. all
+        blocks are valid, then the least recently accessed block will be evicted. Once a slot is secured replace that
+        slot with <address> block and write protect it by setting its lock bit to WRITE_LOCKED.
         :param address:
         :return:
         """
