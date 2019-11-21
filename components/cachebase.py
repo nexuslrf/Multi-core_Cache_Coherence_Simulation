@@ -121,5 +121,35 @@ class CacheBase:
         new_order.remove(target_index)
         new_order.insert(0, target_index)
         cache_set[:] = cache_set[new_order]
-        # for i in current_order:
-        #     cache_set[i] = cache_set_temp[i]
+
+    def reserve_space_for_incoming_block(self, address, state):
+        """
+        find an available block slot for <address> in the corresponding cache_set, if the cache_set is full, i.e. all
+        blocks are valid, then the least recently accessed block will be evicted. Once a slot is secured replace that
+        slot with <address> block and write protect it by setting its lock bit to WRITE_LOCKED.
+        :param address:
+        :return:
+        """
+        tag, set_index, offset = self.resolve_memory_address(address)
+        target_block = None
+        for block in self.data[set_index]:
+            if block[1] == INVALID:
+                target_block = block
+
+        if target_block is None:
+            self.evict_block(self.data[set_index][-1])
+            target_block = self.data[set_index][-1]
+
+        target_block[0] = tag
+        target_block[1] = state
+        target_block[2] = WRITE_LOCKED
+
+    def evict_block(self, block):
+        pass
+
+    def get_address_from_pieces(self, tag, cache_set_index, block_offset=0):
+        address = block_offset
+        tag = tag << self.m + self.n
+        index = cache_set_index << self.n
+        address = address | tag | index
+        return address

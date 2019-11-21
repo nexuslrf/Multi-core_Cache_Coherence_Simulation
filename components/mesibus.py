@@ -1,5 +1,7 @@
 import random
 
+from util import debug
+
 
 class Bus:
     def __init__(self):
@@ -17,53 +19,56 @@ class Bus:
         self.bus_master = None
 
     def interim(self):
+        if self.applicants:
+            self.process_applications()
+
+    def process_applications(self):
         if self.bus_master is not None:
             for _, callback in self.applicants:
                 callback(False)
 
-        if self.applicants:
-            selected_index = random.randint(1, len(self.applicants)) - 1
+        else:
+            selected_index = 0  # always select the first applicant in the list, i.e. processor 0
+            # selected_index = random.randint(1, len(self.applicants)) - 1
             for i in range(len(self.applicants)):
                 if i == selected_index:
                     selected_applicant, callback = self.applicants[i]
                     self.bus_master = selected_applicant
+                    debug("Bus granted to {}".format(selected_applicant.name))
                     callback(True)
                 else:
                     _, callback = self.applicants[i]
                     callback(False)
-
-    # For MESI transaction
+        self.applicants.clear()
 
     def send_read_req(self, caller, address):
         if caller != self.bus_master:
             raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,
                                                                                          self.bus_master.name))
 
-        is_blocked = False
         aggregated_payload = 0
+        aggregated_response = True
         for cache in self.connected_caches:
             if cache != caller:
-                respond, payload_words = cache.bus_read(address)
-                if not respond:
-                    is_blocked = True
+                response, payload_words = cache.bus_read(address)
+                aggregated_response = aggregated_response and response
                 if payload_words:
                     aggregated_payload = payload_words
 
-        return (not is_blocked), aggregated_payload
+        return aggregated_response, aggregated_payload
 
     def send_read_X_req(self, caller, address):
         if caller != self.bus_master:
             raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,
                                                                                          self.bus_master.name))
 
-        is_blocked = False
         aggregated_payload = 0
+        aggregated_response = True
         for cache in self.connected_caches:
             if cache != caller:
-                respond, payload_words = cache.bus_read_X(address)
-                if not respond:
-                    is_blocked = True
+                response, payload_words = cache.bus_readx(address)
+                aggregated_response = aggregated_response and response
                 if payload_words:
                     aggregated_payload = payload_words
 
-        return (not is_blocked), aggregated_payload
+        return aggregated_response, aggregated_payload

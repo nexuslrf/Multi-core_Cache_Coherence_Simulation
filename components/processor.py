@@ -1,4 +1,5 @@
 from job import Job
+from util import debug
 
 
 class Processor:
@@ -8,6 +9,7 @@ class Processor:
         self.op_stream = None
         self.cache = None
         self.done = False
+        self.done_job_counter = -1
         self.counter = 0
 
     def interim(self):
@@ -18,13 +20,16 @@ class Processor:
         if self.is_busy() or self.cache.is_busy() or self.done:
             return
         else:
+            self.done_job_counter += 1
             job = self.fetch_next_job()
             if not job:
                 self.done = True
                 return
             if job.type > 1:  # CPU job
+                debug("{} schedule CPU job: {} cycles".format(self.cache.name, job.countdown_cycles))
                 self.schedule_job(job)
             else:  # mem job
+                debug("{} schedule Cache job: {}".format(self.cache.name, 'STORE' if job.type else 'LOAD'))
                 self.cache.schedule_job(job)
 
     def fetch_next_job(self):

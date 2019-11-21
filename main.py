@@ -1,10 +1,12 @@
 import os
 
 from components.dragoncache import DragonCache
+from components.memorycontroller import MemoryController
 from components.mesibus import Bus
 from components.mesicache import MesiCache
 from opstream import OpStream
 from components.processor import Processor
+import util
 
 
 def create_proc(i, protocol, **kwargs):
@@ -35,9 +37,10 @@ def create_opstream(data_name, num_cores):
 
 
 class Simulator:
-    def __init__(self, protocol='mesi', data='blackscholes_four', num_cores=4, *args, **kwargs):
+    def __init__(self, protocol='mesi', data='blackscholes_four', num_cores=4, memory_controller=MemoryController(),**kwargs):
+        self.memory_controller = memory_controller
         # setup processors with caches
-        self.procs = [create_proc(i, protocol, **kwargs) for i in range(num_cores)]
+        self.procs = [create_proc(i, protocol, memory_controller=memory_controller, **kwargs) for i in range(num_cores)]
         # setup op stream for each processor
         if data:
             for proc, opstream in zip(self.procs, create_opstream(data, num_cores)):
@@ -46,9 +49,13 @@ class Simulator:
         self.bus = connect_bus(self.procs, Bus())
         # cycle counter
         self.counter = 0
+        util.counter = 0
 
     def run(self):
         while self.tick():
+            for proc in self.procs:
+                if proc.done_job_counter % 1000 == 0 and proc.done_job_counter // 1000 > 0:
+                    print("{}: {} jobs done.".format(proc.cache.name, proc.done_job_counter))
             continue
 
         print("All Finished! Current counter: {}".format(self.counter))
@@ -78,12 +85,20 @@ class Simulator:
             print('Game Over')
             return False
 
-        # tick the clock cycle once for every component, processors first, then caches (bus does not have this)
+        # tick the clock cycle once for every component, processors first, then caches, then memory
         for p in self.procs:
             p.tick()
 
         for p in self.procs:
             p.cache.tick()
 
+        self.memory_controller.tick()
+
         self.counter += 1
+        util.counter += 1
         return True
+
+
+if __name__ == '__main__':
+    sim = Simulator()
+    sim.run()
