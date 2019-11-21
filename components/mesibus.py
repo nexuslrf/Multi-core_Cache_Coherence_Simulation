@@ -1,5 +1,7 @@
 import random
 
+from util import debug
+
 
 class Bus:
     def __init__(self):
@@ -32,6 +34,7 @@ class Bus:
                 if i == selected_index:
                     selected_applicant, callback = self.applicants[i]
                     self.bus_master = selected_applicant
+                    debug("Bus granted to {}".format(selected_applicant.name))
                     callback(True)
                 else:
                     _, callback = self.applicants[i]
@@ -60,14 +63,13 @@ class Bus:
             raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,
                                                                                          self.bus_master.name))
 
-        is_blocked = False
         aggregated_payload = 0
+        aggregated_response = True
         for cache in self.connected_caches:
             if cache != caller:
-                respond, payload_words = cache.bus_read_X(address)
-                if not respond:
-                    is_blocked = True
+                response, payload_words = cache.bus_read(address)
+                aggregated_response = aggregated_response and response
                 if payload_words:
                     aggregated_payload = payload_words
 
-        return (not is_blocked), aggregated_payload
+        return aggregated_response, aggregated_payload

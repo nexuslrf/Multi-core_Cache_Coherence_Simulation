@@ -8,7 +8,7 @@ from constants.jobtype import *
 from constants.locking import *
 from constants.mesi import *
 from job import CacheJob
-from util import resolve_memory_address
+from util import resolve_memory_address, debug
 
 
 class MesiCache(CacheBase):
@@ -30,14 +30,13 @@ class MesiCache(CacheBase):
         if job.type == LOAD:
             self.handle_proc_read(job)
         if job.type == STORE:
-            pass
+            self.handle_proc_write(job)
 
     def handle_proc_read(self, job):
         block = self.get_cache_block(job.address)
         if block is not None:
-            if block[1] != INVALID:
-                self.start_hitting()
-                return
+            self.start_hitting()
+            return
         self.bus.apply_for_bus_master(self, self.bus_control_granted)
 
     def handle_proc_write(self, job):
@@ -57,14 +56,14 @@ class MesiCache(CacheBase):
 
     def get_cache_block(self, address):
         """
-        get the cache block that contains the address, note that blocks in Invalid state will also be returned. As
-        long as tag and index has a match.
+        get the cache block that contains the address, note that blocks in Invalid state will not be returned, even
+        though their tag and index has a match.
         :param address: 32-bit memory address
         :return: None if block containing this address is not found in cache, otherwise the found block
         """
         tag, set_index, offset = self.resolve_memory_address(address)
         for block in self.data[set_index]:
-            if block[0] == tag:
+            if block[0] == tag and block[1] != INVALID:
                 return block
 
         return None
@@ -78,15 +77,15 @@ class MesiCache(CacheBase):
                 self.reserve_space_for_incoming_block(self.current_job.address, SHARED)
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
+                debug("{} start reading from Bus: {} cycles".format(self.name, self.current_job.remaining_bus_read_cycles))
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
                 self.bus.release_ownership(self)
                 self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
+                debug("{} start fetching from Mem: 100 cycles".format(self.name))
 
         if self.current_job.type == STORE:
-            self.set_block_state(self.current_job.address, MODIFIED)
-            self.lock_block(self.current_job.address)
             result, payload_words = self.bus.send_read_X_req(self, self.current_job.address)
             if not result:
                 self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
@@ -94,7 +93,8 @@ class MesiCache(CacheBase):
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
-                self.lock_block(self.current_job.address)
+                self.bus.release_ownership(self)
+                self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
 
@@ -162,8 +162,6 @@ class MesiCache(CacheBase):
                 self.evict_block(block)
                 block[1] = SHARED
                 return True, self.block_size//4
-            if block[1] == INVALID:
-                return True, 0
 
         return True, 0
 
@@ -182,7 +180,5 @@ class MesiCache(CacheBase):
                 self.evict_block(block)
                 block[1] = INVALID
                 return True, self.block_size // 4
-            if block[1] == INVALID:
-                return True, 0
 
         return True, 0

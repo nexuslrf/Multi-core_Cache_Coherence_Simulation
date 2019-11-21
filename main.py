@@ -6,6 +6,7 @@ from components.mesibus import Bus
 from components.mesicache import MesiCache
 from opstream import OpStream
 from components.processor import Processor
+import util
 
 
 def create_proc(i, protocol, **kwargs):
@@ -90,4 +91,5 @@ class Simulator:
         self.memory_controller.tick()
 
         self.counter += 1
+        util.counter += 1
         return True

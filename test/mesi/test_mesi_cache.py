@@ -18,8 +18,14 @@ def test_get_cache_block(cache_0:MesiCache):
 
     block = cache_0.get_cache_block(0b10100000000100)
 
+    assert block is None
+
+    cache_0.data[0][1] = [0b101, SHARED, UNLOCKED]
+
+    block = cache_0.get_cache_block(0b10100000000100)
+
     assert block is not None
-    assert list(block) == [0b101, INVALID, UNLOCKED]
+    assert list(block) == [0b101, SHARED, UNLOCKED]
 
 
 @pytest.mark.parametrize(
@@ -200,3 +206,33 @@ def test_cache_read_block_while_other_cache_fetching_same_block_from_mem():
     simulator.run()
     assert simulator.procs[1].counter == 100+simulator.procs[1].cache.block_size//4*2 + 1
     assert simulator.counter == 100+simulator.procs[1].cache.block_size//4*2 + (len(op_list) - 1)*101
+
+
+def test_cache_four_core_same_access():
+    op_list = [(0, 0b100000100001), (0, 0b1000000110000), (0, 0b1100000100111), (0, 0b10000000110011)]
+    simulator = Simulator(data=None, num_cores=4)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list)
+    simulator.procs[2].op_stream = FakeOpStream(op_list)
+    simulator.procs[3].op_stream = FakeOpStream(op_list)
+    simulator.run()
+
+
+def test_cache_store_direct_hit():
+    op_list = [(1, 0b100000100001), (1, 0b1000000110000), (1, 0b100000100111), (1, 0b1000000110011)]
+    simulator = Simulator(data=None, num_cores=1)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[0].cache.data[1] = np.matrix([
+        [1, EXCLUSIVE, 0],
+        [2, MODIFIED, 0]
+    ])
+    simulator.run()
+    assert simulator.counter == len(op_list)
+
+
+def test_cache_store_fetch_from_memory_only():
+    op_list = [(1, 0b100000100001), (1, 0b1000000110000), (1, 0b1100000100111), (1, 0b10000000110011)]
+    simulator = Simulator(data=None, num_cores=1)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.run()
+    assert simulator.counter == len(op_list) * 101
