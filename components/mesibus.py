@@ -67,7 +67,7 @@ class Bus:
         aggregated_response = True
         for cache in self.connected_caches:
             if cache != caller:
-                response, payload_words = cache.bus_read(address)
+                response, payload_words = cache.bus_readx(address)
                 aggregated_response = aggregated_response and response
                 if payload_words:
                     aggregated_payload = payload_words

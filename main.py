@@ -49,9 +49,13 @@ class Simulator:
         self.bus = connect_bus(self.procs, Bus())
         # cycle counter
         self.counter = 0
+        util.counter = 0
 
     def run(self):
         while self.tick():
+            for proc in self.procs:
+                if proc.done_job_counter % 1000 == 0 and proc.done_job_counter // 1000 > 0:
+                    print("{}: {} jobs done.".format(proc.cache.name, proc.done_job_counter))
             continue
 
         print("All Finished! Current counter: {}".format(self.counter))
@@ -93,3 +97,8 @@ class Simulator:
         self.counter += 1
         util.counter += 1
         return True
+
+
+if __name__ == '__main__':
+    sim = Simulator()
+    sim.run()

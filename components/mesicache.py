@@ -45,7 +45,6 @@ class MesiCache(CacheBase):
             if block[1] in [MODIFIED, EXCLUSIVE]:
                 self.start_hitting()
                 return
-            # TODO do we still need to handle Shared and Invalid cases
         self.bus.apply_for_bus_master(self, self.bus_control_granted)
 
     def bus_control_granted(self, result):
@@ -90,6 +89,7 @@ class MesiCache(CacheBase):
             if not result:
                 self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
             elif payload_words:  # result comes with payload, data will be supplied by one of other caches
+                self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
@@ -114,6 +114,8 @@ class MesiCache(CacheBase):
         self.current_job.status_in_cache = HITTING
 
     def on_hit_finished(self):
+        if self.current_job.type == STORE:
+            self.set_block_state(self.current_job.address, MODIFIED)
         self.unlock_block(self.current_job.address)
         self.current_job = None
 
@@ -168,7 +170,7 @@ class MesiCache(CacheBase):
     def bus_readx(self, address):
         block = self.get_cache_block(address)
         if block is not None:
-            if block[2] > READ_LOCKED:
+            if block[2] > UNLOCKED:
                 return False, 0
             if block[1] == SHARED:
                 block[1] = INVALID
