@@ -32,6 +32,8 @@ class Bus:
                     _, callback = self.applicants[i]
                     callback(False)
 
+    # For MESI transaction
+
     def send_read_req(self, caller, address):
         if caller != self.bus_master:
             raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,

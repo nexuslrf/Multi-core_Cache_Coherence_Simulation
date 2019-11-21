@@ -2,6 +2,7 @@ import numpy as np
 
 from main import Simulator
 from opstream import FakeOpStream
+from constants.dragon import *
 
 
 def test_cache_direct_hit_only():
@@ -9,8 +10,8 @@ def test_cache_direct_hit_only():
     simulator = Simulator(protocol='dragon', data=None, num_cores=1)
     simulator.procs[0].op_stream = FakeOpStream(op_list)
     simulator.procs[0].cache.data[1] = np.matrix([
-        [1,1,0],
-        [2,1,0]
+        [1, SC, 0],
+        [2, SC, 0]
     ])
     simulator.run()
     assert simulator.counter == len(op_list)
