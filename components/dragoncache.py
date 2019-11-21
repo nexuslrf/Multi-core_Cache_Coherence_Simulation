@@ -33,22 +33,24 @@ class DragonCache(CacheBase):
 
     def handle_proc_read(self, job):
         block = self.get_cache_block(job.address)
-        if block is not None:  # if the tag in cache, it is valid.
-            self.start_hitting()
+        if block is not None:
+            if block[1] != INVALID:
+                self.start_hitting()
         else:
             # @TODO check it!
             self.bus.apply_for_bus_master(self, self.bus_control_granted)
 
-    def bus_control_granted(self, result):
-        if result:  # bus ownership granted
-            self.allocate_block(self.current_job.address)
-            self.send_job_specific_bus_request()
-        else:  # bus ownership rejected
-            return  # start over next time
-
-    def allocate_block(self, address):
-        # check if block exists in cache
-        tag, set_index, offset = self.resolve_memory_address(address)
-        for block in self.data[set_index]:
-            if block[0] == tag:
-                return
+    # @TODO check it!
+    # def bus_control_granted(self, result):
+    #     if result:  # bus ownership granted
+    #         self.allocate_block(self.current_job.address)
+    #         self.send_job_specific_bus_request()
+    #     else:  # bus ownership rejected
+    #         return  # start over next time
+    #
+    # def allocate_block(self, address):
+    #     # check if block exists in cache
+    #     tag, set_index, offset = self.resolve_memory_address(address)
+    #     for block in self.data[set_index]:
+    #         if block[0] == tag:
+    #             return

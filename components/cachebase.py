@@ -120,6 +120,6 @@ class CacheBase:
         new_order = current_order.copy()
         new_order.remove(target_index)
         new_order.insert(0, target_index)
-        cache_set_temp = cache_set[new_order]
-        for i in current_order:
-            cache_set[i] = cache_set_temp[i]
+        cache_set[:] = cache_set[new_order]
+        # for i in current_order:
+        #     cache_set[i] = cache_set_temp[i]
