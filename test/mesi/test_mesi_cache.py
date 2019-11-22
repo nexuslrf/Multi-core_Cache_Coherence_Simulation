@@ -138,6 +138,8 @@ def test_cache_direct_hit_only():
         [2, 1, 0]
     ])
     simulator.run()
+    assert simulator.procs[0].cache.total_access_count == len(op_list)
+    assert simulator.procs[0].cache.cache_miss_count == 0
     assert simulator.counter == len(op_list)
     assert np.array_equal(simulator.procs[0].cache.data[1], [
         [2, 1, 0],
@@ -152,6 +154,8 @@ def test_cache_fetch_from_memory_only():
     simulator.procs[0].op_stream = FakeOpStream(op_list)
     simulator.procs[1].op_stream = FakeOpStream(op_list1)
     simulator.run()
+    assert simulator.procs[0].cache.total_access_count == len(op_list)
+    assert simulator.procs[0].cache.cache_miss_count == 4
     assert simulator.counter == len(op_list) * 101 + 1  # the extra 1 cycle is spent competing for bus ownership
 
 
@@ -182,6 +186,8 @@ def test_cache_fetch_from_bus_only(cache_set_array, number_of_mem_access, dest_b
     simulator.procs[1].op_stream = FakeOpStream(op_list1)
     simulator.procs[1].cache.data[1] = np.matrix(cache_set_array)
     simulator.run()
+    assert simulator.procs[0].cache.total_access_count == len(op_list)
+    assert simulator.procs[0].cache.cache_miss_count == number_of_mem_access
     assert np.array_equal(simulator.procs[0].cache.data[1][:, 1], dest_block_states)
     assert simulator.counter == (len(op_list) - number_of_mem_access) * (
                 2 * simulator.procs[0].cache.block_size // 4 + 1) + number_of_mem_access * 101
@@ -285,6 +291,10 @@ def test_cache_write_block_while_other_cache_fetching_same_block_from_mem():
     simulator.run()
     assert simulator.procs[1].counter == 100 + simulator.procs[1].cache.block_size // 4 * 2 + 2
     assert simulator.counter == 101 + simulator.procs[1].cache.block_size // 4 * 2 + (len(op_list) - 1) * 101
+    assert simulator.procs[0].total_load_instructions == 4
+    assert simulator.procs[0].total_store_instructions == 0
+    assert simulator.procs[1].total_load_instructions == 0
+    assert simulator.procs[1].total_store_instructions == 1
 
 
 def test_interleaving_cache_write_from_different_caches():
@@ -295,6 +305,7 @@ def test_interleaving_cache_write_from_different_caches():
     simulator.procs[1].op_stream = FakeOpStream(op_list1)
     simulator.run()
     assert simulator.procs[1].counter == 101 + simulator.procs[1].cache.block_size // 4 * 2 + 2
+    assert simulator.procs[1].total_compute_cycles == 10
 
 
 def test_incoming_read_x_wait_for_local_read():
@@ -325,3 +336,38 @@ def test_cache_write_four_core_same_access():
     simulator.procs[2].op_stream = FakeOpStream(op_list)
     simulator.procs[3].op_stream = FakeOpStream(op_list)
     simulator.run()
+
+
+def test_correctness_of_total_bus_traffic_counting():
+    op_list = [(0, 0b100000100001), (0, 0b1000000110000), (0, 0b1100000100111), (0, 0b10000000110011)]
+    op_list1 = [(2, 10), (0, 0b100000100001)]
+    simulator = Simulator(data=None, num_cores=2)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.run()
+    cache0 = simulator.procs[0].cache
+    assert simulator.bus.total_bus_traffic == cache0.block_size * 1
+
+
+def test_correctness_of_bus_invalidation_update_counting():
+    op_list = [(0, 0b100000100001), (0, 0b1000000110000), (0, 0b1100000100111), (0, 0b10000000110011)]
+    op_list1 = [(2, 10), (1, 0b100000100001)]
+    simulator = Simulator(data=None, num_cores=2)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.run()
+    assert simulator.bus.total_bus_invalidation_or_updates == 1
+
+
+def test_counting_total_private_accesses():
+    op_list = [(0, 0b100000100001), (0, 0b1000000110000), (0, 0b1100000100111), (0, 0b10000000110011)]
+    op_list1 = [(2, 10), (1, 0b100000100001), (0, 0b1000000110000)]
+    simulator = Simulator(data=None, num_cores=2)
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.run()
+    cache0 = simulator.procs[0].cache
+    cache1 = simulator.procs[1].cache
+    assert cache0.total_private_accesses == 4
+    assert cache1.total_private_accesses == 1
+    assert cache1.total_access_count == 2
