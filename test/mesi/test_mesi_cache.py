@@ -4,7 +4,7 @@ from constants.cache import *
 from constants.jobtype import *
 from constants.locking import *
 from constants.mesi import *
-from job import Job
+from job import Job, CacheJob
 from main import Simulator
 from components.mesibus import Bus
 from components.mesicache import MesiCache
@@ -85,7 +85,7 @@ def test_cache_set_order_update_raise_error_if_tag_not_found(cache_assoc_4: Mesi
           [33, 1, 0],
           [44, 1, 0]],
          [[11, 1, 0],
-          [1, EXCLUSIVE, WRITE_LOCKED],
+          [1, 0, WRITE_LOCKED],
           [33, 1, 0],
           [44, 1, 0]]
          ),
@@ -96,7 +96,7 @@ def test_cache_set_order_update_raise_error_if_tag_not_found(cache_assoc_4: Mesi
          [[11, 1, 0],
           [22, 1, 0],
           [33, 1, 0],
-          [1, EXCLUSIVE, WRITE_LOCKED]]
+          [1, 0, WRITE_LOCKED]]
          )
     ]
 )
@@ -104,7 +104,8 @@ def test_reserve_space_for_block(cache_assoc_4: MesiCache, cache_set_array, expe
     cache_assoc_4.memory_controller = mc
     cache_assoc_4.data[1] = np.matrix(cache_set_array)
     address = cache_assoc_4.get_address_from_pieces(1, 1, 1)
-    cache_assoc_4.reserve_space_for_incoming_block(address, EXCLUSIVE)
+    cache_assoc_4.current_job = CacheJob(LOAD, address=address, remaining_cycles=10)
+    cache_assoc_4.reserve_space_for_incoming_block(address)
     assert np.array_equal(cache_assoc_4.data[1], expected)
 
 
@@ -247,7 +248,7 @@ def test_cache_store_fetch_from_memory_only():
     simulator = Simulator(data=None, num_cores=1)
     simulator.procs[0].op_stream = FakeOpStream(op_list)
     simulator.run()
-    assert simulator.counter == len(op_list) * 101
+    assert simulator.counter == len(op_list) * 101 + 200
 
 
 @pytest.mark.parametrize(
@@ -371,3 +372,56 @@ def test_counting_total_private_accesses():
     assert cache0.total_private_accesses == 4
     assert cache1.total_private_accesses == 1
     assert cache1.total_access_count == 2
+
+
+@pytest.mark.parametrize(
+    "home_array, remote_array, home_array_after",
+    [
+        ([[11, SHARED, 0],
+          [22, SHARED, 0]],
+         [[11, SHARED, 0],
+          [22, SHARED, 0]],
+         [[11, MODIFIED, 0],
+          [22, SHARED, 0]]
+         )
+    ]
+)
+def test_bus_read_x_to_full_cacheset_does_not_evict_block_if_block_present(home_array, remote_array, home_array_after):
+    op_list_raw = [(1, 11, 1, 1)]
+    op_list1 = []
+    simulator = Simulator(data=None, num_cores=2)
+    op_list = [(x[0], simulator.procs[0].cache.get_address_from_pieces(*x[1:])) for x in op_list_raw]
+
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.procs[0].cache.data[1] = np.matrix(home_array)
+    simulator.procs[1].cache.data[1] = np.matrix(remote_array)
+    simulator.run()
+    assert np.array_equal(simulator.procs[0].cache.data[1], home_array_after)
+
+
+@pytest.mark.parametrize(
+    "home_array, remote_array, home_array_after",
+    [
+        ([[11, SHARED, 0],
+          [22, SHARED, 0]],
+         [[11, INVALID, 0],
+          [22, INVALID, 0]],
+         [[11, MODIFIED, 0],
+          [22, SHARED, 0]]
+         )
+    ]
+)
+def test_another(home_array, remote_array, home_array_after):
+    op_list_raw = [(1, 11, 1, 1)]
+    op_list1 = []
+    simulator = Simulator(data=None, num_cores=2)
+    op_list = [(x[0], simulator.procs[0].cache.get_address_from_pieces(*x[1:])) for x in op_list_raw]
+
+    simulator.procs[0].op_stream = FakeOpStream(op_list)
+    simulator.procs[1].op_stream = FakeOpStream(op_list1)
+    simulator.procs[0].cache.data[1] = np.matrix(home_array)
+    simulator.procs[1].cache.data[1] = np.matrix(remote_array)
+    simulator.run()
+    assert np.array_equal(simulator.procs[0].cache.data[1], home_array_after)
+    assert simulator.procs[0].counter == 1

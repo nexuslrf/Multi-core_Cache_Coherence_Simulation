@@ -2,7 +2,7 @@ import random
 
 from util import debug
 
-
+# xx_cnt = 0
 
 class Bus:
     def __init__(self):
@@ -16,9 +16,12 @@ class Bus:
         self.applicants.append((cache, callback))
 
     def release_ownership(self, caller):
+        # global xx_cnt
         if caller != self.bus_master:
             raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,
-                                                                                         self.bus_master.name))
+                                                                                      self.bus_master.name))
+        # xx_cnt += 1
+        # if xx_cnt >= 417: print()
         self.bus_master = None
 
     def interim(self):

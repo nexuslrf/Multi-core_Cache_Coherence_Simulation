@@ -109,17 +109,18 @@ def collect_statistics(sim:Simulator):
     stats['Overall Execution Cycle'] = sim.counter
     stats['Bus Data Traffic'] = sim.bus.total_bus_traffic
     stats['Bus Invalidation/Updates'] = sim.bus.total_bus_invalidation_or_updates
-    stats['Private Data Access Percentage'] = sum([x.cache.total_private_accesses for x in sim.procs])/sum([x.cache.total_access_count for x in sim.procs])
+    stats['Private Data Access Percentage'] = 100*sum([x.cache.total_private_accesses for x in sim.procs])/sum([x.cache.total_access_count for x in sim.procs])
     stats_df = pd.DataFrame.from_dict({'stats':stats})
+    stats_df = stats_df.astype(int)
     stats_df.to_csv('./output/overall.csv')
     print(stats_df)
 
     stats_per_core = {}
     for proc in sim.procs:
         stats_per_core[proc.cache.name] = {
-            'Compute Cycles': proc.total_compute_cycles,
-            'Load/Store Instructions': proc.total_store_instructions + proc.total_load_instructions,
-            'Idle Cycles': proc.counter - proc.total_compute_cycles,
+            'Compute Cycles': int(proc.total_compute_cycles),
+            'Load/Store Instructions': int(proc.total_store_instructions + proc.total_load_instructions),
+            'Idle Cycles': int(proc.counter - proc.total_compute_cycles),
             'Cache Miss Rate': round(proc.cache.cache_miss_count / proc.cache.total_access_count, 2)
         }
     stats_per_core_df = pd.DataFrame.from_dict(stats_per_core)
@@ -128,6 +129,6 @@ def collect_statistics(sim:Simulator):
 
 
 if __name__ == '__main__':
-    sim = Simulator(limit=1000)
+    sim = Simulator(limit=2000, protocol='mesi')
     sim.run()
     collect_statistics(sim)

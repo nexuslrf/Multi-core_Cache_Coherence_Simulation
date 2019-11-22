@@ -9,6 +9,7 @@ from util import resolve_memory_address
 
 from util import resolve_memory_address, debug
 
+# tt = 0
 
 class DragonCache(CacheBase):
     def __init__(self, name, size=4096, assoc=2, block_size=32, memory_controller=None, bus=None):
@@ -46,7 +47,6 @@ class DragonCache(CacheBase):
                 return True
         return False
 
-
     def handle_proc_write(self, job):
         block = self.get_cache_block(job.address)
         if block is not None:
@@ -62,36 +62,51 @@ class DragonCache(CacheBase):
             return  # start over next time
 
     def send_job_specific_bus_request(self):
+        # global tt
         if self.current_job.type == LOAD:
-            result, payload_words = self.bus.send_read_req(self, self.current_job.address)
-            if not result:
-                self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
-            elif payload_words:  # result comes with payload, data will be supplied by one of other caches
-                self.reserve_space_for_incoming_block(self.current_job.address, SC)
+            result, self.payload_words = self.bus.send_read_req(self, self.current_job.address)
+        else:
+            result, self.payload_words = self.bus.send_update_req(self, self.current_job.address)
+
+        if not result:
+            self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
+            return
+        # if tt==416: print()
+        need_eviction = self.reserve_space_for_incoming_block(self.current_job.address)
+        # tt += 1
+        if need_eviction:
+            self.current_job.status_in_cache = WAITING_FOR_MEMORY
+            return
+
+        self.proceed_with_bus_payload(self.payload_words)
+
+    def proceed_with_bus_payload(self, payload_words):
+        if self.current_job.type == LOAD:
+            if payload_words:  # result comes with payload, data will be supplied by one of other caches
+                self.set_block_state(self.current_job.address, SC)
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
                 debug("{} start reading from Bus: {} cycles".format(self.name, self.current_job.remaining_bus_read_cycles))
+
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
+                self.set_block_state(self.current_job.address, EC)
                 self.cache_miss_count += 1
                 self.bus.release_ownership(self)
-                self.reserve_space_for_incoming_block(self.current_job.address, EC)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
                 debug("{} start fetching from Mem: 100 cycles".format(self.name))
 
         if self.current_job.type == STORE:
-            result, payload_words = self.bus.send_update_req(self, self.current_job.address)
-            if not result:
-                self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
-            elif payload_words:  # result comes with payload, data will be supplied by one of other caches
+
+            if payload_words:  # result comes with payload, data will be supplied by one of other caches
                 self.bus.send_lock_req(self, self.current_job.address, WRITE_LOCKED)
-                self.reserve_space_for_incoming_block(self.current_job.address, SM)
+                self.set_block_state(self.current_job.address, SM)
                 self.current_job.status_in_cache = WAITING_FOR_BUS_UPD
                 # @TODO cycles for whom?
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
                 self.bus.release_ownership(self)
-                self.reserve_space_for_incoming_block(self.current_job.address, M)
+                self.set_block_state(self.current_job.address, M)
                 # @TODO ignore mem ops.
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
@@ -137,6 +152,9 @@ class DragonCache(CacheBase):
     def on_fetch_from_memory_finished(self):
         self.start_hitting()
 
+    def on_evict_to_memory_finished(self):
+        self.proceed_with_bus_payload(self.payload_words)
+
     def bus_read(self, address):
         """
 
@@ -148,14 +166,18 @@ class DragonCache(CacheBase):
         if block is not None:
             if block[2] > READ_LOCKED:
                 return False, 0
-            if block[1] in [SC, SM]:
+            if block[1] == SC:
                 return True, self.block_size//4
-            if block[1] == EC:
+            elif block[1] == EC:
                 block[1] = SC
                 return True, self.block_size//4
-            if block[1] == M:
+            elif block[1] == M:
+                self.evict_block_passive(block)
                 block[1] = SM
                 return True, self.block_size//4
+            elif block[1] == SM:
+                self.evict_block_passive(block)
+                return True, self.block_size // 4
 
         return True, 0
 
@@ -169,29 +191,6 @@ class DragonCache(CacheBase):
                 return True, self.block_size // 4
 
         return True, 0
-
-    def evict_block(self, block, set_index=0):
-        if block[1] == EC:
-            pass
-        elif block[1] == M:
-            # 100 cycle
-            pass
-        elif block[1] == SM:
-            blocks = self.bus.check_share_line(self, self.get_address_from_pieces(block[0], set_index))
-            if len(blocks) == 1:
-                blocks[0][1] = EC
-            elif len(blocks) > 1:
-                for b in blocks:
-                    b[1] = SC
-            # 100 cycle
-
-        elif block[1] == SC:
-            blocks = self.bus.check_share_line(self, self.get_address_from_pieces(block[0], set_index))
-            if len(blocks) == 1:
-                blocks[0][1] = EC
-            elif len(blocks) > 1:
-                for b in blocks:
-                    b[1] = SC
 
     def get_cache_block(self, address):
         """
@@ -207,4 +206,48 @@ class DragonCache(CacheBase):
 
         return None
 
+    def reserve_space_for_incoming_block(self, address):
+        """
+        find an available block slot for <address> in the corresponding cache_set, if the cache_set is full, i.e. all
+        blocks are valid, then the least recently accessed block will be evicted. Once a slot is secured replace that
+        slot with <address> block and write protect it by setting its lock bit to WRITE_LOCKED.
+        :param address:
+        :return: True if resulting in block eviction, otherwise False
+        """
+        tag, set_index, offset = self.resolve_memory_address(address)
+        target_block = None
+        need_eviction = False
+        for block in self.data[set_index]:
+            if block[0] == tag:
+                target_block = block
+                break
+            if block[1] == INVALID:
+                target_block = block
+                break
 
+        if target_block is None:
+            target_block = self.data[set_index][-1]  # set to the least recently accessed block
+            if target_block[1] == M:
+                need_eviction = True
+                self.evict_block(self.data[set_index][-1])
+            elif target_block[1] == SM:
+                blocks = self.bus.check_share_line(self, self.get_address_from_pieces(target_block[0], set_index))
+                if len(blocks) == 1:
+                    blocks[0][1] = EC
+                elif len(blocks) > 1:
+                    for b in blocks:
+                        b[1] = SC
+                need_eviction = True
+                self.evict_block(self.data[set_index][-1])
+            elif target_block[1] == SC:
+                blocks = self.bus.check_share_line(self, self.get_address_from_pieces(target_block[0], set_index))
+                if len(blocks) == 1:
+                    blocks[0][1] = EC
+                elif len(blocks) > 1:
+                    for b in blocks:
+                        b[1] = SC
+            target_block[1] = INVALID
+
+        target_block[0] = tag
+        target_block[2] = WRITE_LOCKED
+        return need_eviction
