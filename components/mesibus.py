@@ -72,3 +72,31 @@ class Bus:
                     aggregated_payload = payload_words
 
         return aggregated_response, aggregated_payload
+
+    # for Dragon
+    def send_update_req(self, caller, address):
+        if caller != self.bus_master:
+            raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,
+                                                                                         self.bus_master.name))
+
+        aggregated_payload = 0
+        aggregated_response = True
+        for cache in self.connected_caches:
+            if cache != caller:
+                response, payload_words = cache.bus_update(address)
+                aggregated_response = aggregated_response and response
+                if payload_words:
+                    aggregated_payload = payload_words
+
+        return aggregated_response, aggregated_payload
+
+    def send_lock_req(self, caller, address, lock):
+        if caller != self.bus_master:
+            raise PermissionError("Requester {} is not the current bus master {}".format(caller.name,
+                                                                                         self.bus_master.name))
+
+        for cache in self.connected_caches:
+            if cache != caller:
+                cache.lock_block(address, lock)
+
+

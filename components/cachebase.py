@@ -40,7 +40,7 @@ class CacheBase:
         if self.current_job is None:
             return
         else:
-            if self.current_job.status_in_cache == RECEIVING_FROM_BUS:
+            if self.current_job.status_in_cache in [RECEIVING_FROM_BUS, WAITING_FOR_BUS_UPD]:
                 self.current_job.remaining_bus_read_cycles -= 1
                 if self.current_job.remaining_bus_read_cycles < 1:
                     self.on_bus_read_finished()
