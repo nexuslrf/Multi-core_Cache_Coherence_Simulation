@@ -1,0 +1,1 @@
+python main.py --protocol "$1" --input_file "$2" --cache_size "$3" --associativity "$4" --block_size "$5"

@@ -7,13 +7,14 @@ from components.mesicache import MesiCache
 from opstream import OpStream
 from components.processor import Processor
 import util
+from opts import args
 
 
 def create_proc(i, protocol, limit, **kwargs):
     proc = Processor(i, limit=limit, **kwargs)
-    if protocol == 'mesi':
+    if protocol == 'MESI':
         proc.cache = MesiCache(name='P' + str(i), **kwargs)
-    if protocol == 'dragon':
+    if protocol == 'DRAGON':
         proc.cache = DragonCache(name='P' + str(i), **kwargs)
     return proc
 
@@ -26,7 +27,7 @@ def connect_bus(procs, bus):
 
 
 def create_opstream(data_name, num_cores):
-    dir_path = './data/{}/'.format(data_name)
+    dir_path = data_name
     result = []
     for i in range(num_cores):
         for file in os.listdir(dir_path):
@@ -129,6 +130,8 @@ def collect_statistics(sim:Simulator):
 
 
 if __name__ == '__main__':
-    sim = Simulator(limit=2000, protocol='mesi')
+    sim = Simulator(protocol=args.protocol, data=args.input_file,
+                    block_size=args.block_size, assoc=args.associativity,
+                    size=args.cache_size)
     sim.run()
     collect_statistics(sim)

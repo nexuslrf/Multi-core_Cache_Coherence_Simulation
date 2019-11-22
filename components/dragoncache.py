@@ -103,7 +103,7 @@ class DragonCache(CacheBase):
                 self.set_block_state(self.current_job.address, SM)
                 self.current_job.status_in_cache = WAITING_FOR_BUS_UPD
                 # @TODO cycles for whom?
-                self.current_job.remaining_bus_read_cycles = payload_words * 2
+                self.current_job.remaining_bus_read_cycles = 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
                 self.bus.release_ownership(self)
                 self.set_block_state(self.current_job.address, M)
