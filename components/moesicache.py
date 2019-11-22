@@ -211,7 +211,7 @@ class MoesiCache(CacheBase):
             if block[1] == EXCLUSIVE:
                 block[1] = INVALID
                 return True, self.block_size // 4, mem_op
-            if block[1] == [MODIFIED, OWNED]:
+            if block[1] in [MODIFIED, OWNED]:
                 block[1] = INVALID
                 mem_op = True
                 return True, self.block_size // 4, mem_op
