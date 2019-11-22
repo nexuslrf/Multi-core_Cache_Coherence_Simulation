@@ -103,7 +103,7 @@ class Bus:
         if aggregated_response:
             self.total_bus_invalidation_or_updates += 1
             if aggregated_payload:
-                self.total_bus_traffic += aggregated_payload * 4
+                self.total_bus_traffic += 4
         return aggregated_response, aggregated_payload
 
     def send_lock_req(self, caller, address, lock):
