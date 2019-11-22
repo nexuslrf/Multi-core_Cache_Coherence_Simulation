@@ -135,6 +135,6 @@ def collect_statistics(sim:Simulator):
 if __name__ == '__main__':
     sim = Simulator(protocol=args.protocol, data=args.input_file,
                     block_size=args.block_size, assoc=args.associativity,
-                    size=args.cache_size, limit=6000)
+                    size=args.cache_size)
     sim.run()
     collect_statistics(sim)
