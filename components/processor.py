@@ -11,6 +11,10 @@ class Processor:
         self.done = False
         self.done_job_counter = -1
         self.counter = 0
+        self.total_compute_cycles = 0
+        self.total_load_instructions = 0
+        self.total_store_instructions = 0
+        self.done_job_limit = kwargs.get('limit', 0)
 
     def interim(self):
         """
@@ -25,11 +29,19 @@ class Processor:
             if not job:
                 self.done = True
                 return
+            if self.done_job_limit and self.done_job_counter >= self.done_job_limit:
+                self.done = True
+                return
             if job.type > 1:  # CPU job
                 debug("{} schedule CPU job: {} cycles".format(self.cache.name, job.countdown_cycles))
+                self.total_compute_cycles += job.countdown_cycles
                 self.schedule_job(job)
             else:  # mem job
                 debug("{} schedule Cache job: {}".format(self.cache.name, 'STORE' if job.type else 'LOAD'))
+                if job.type:
+                    self.total_store_instructions += 1
+                else:
+                    self.total_load_instructions += 1
                 self.cache.schedule_job(job)
 
     def fetch_next_job(self):

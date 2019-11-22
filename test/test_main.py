@@ -25,3 +25,4 @@ def test_cpu_only_job():
     simulator = Simulator()
     simulator.run()
     assert simulator.counter == 0x27 * 3
+    assert simulator.procs[1].total_compute_cycles == 0x27 * 3

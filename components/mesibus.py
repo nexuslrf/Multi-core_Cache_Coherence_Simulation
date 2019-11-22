@@ -3,11 +3,14 @@ import random
 from util import debug
 
 
+
 class Bus:
     def __init__(self):
         self.connected_caches = []
         self.applicants = []
         self.bus_master = None
+        self.total_bus_invalidation_or_updates = 0
+        self.total_bus_traffic = 0  # unit in bytes
 
     def apply_for_bus_master(self, cache, callback):
         self.applicants.append((cache, callback))
@@ -55,6 +58,8 @@ class Bus:
                 if payload_words:
                     aggregated_payload = payload_words
 
+        if aggregated_response and aggregated_payload:
+                self.total_bus_traffic += aggregated_payload * 4
         return aggregated_response, aggregated_payload
 
     def send_read_X_req(self, caller, address):
@@ -71,6 +76,10 @@ class Bus:
                 if payload_words:
                     aggregated_payload = payload_words
 
+        if aggregated_response:
+            self.total_bus_invalidation_or_updates += 1
+            if aggregated_payload:
+                self.total_bus_traffic += aggregated_payload * 4
         return aggregated_response, aggregated_payload
 
     # for Dragon
@@ -88,6 +97,10 @@ class Bus:
                 if payload_words:
                     aggregated_payload = payload_words
 
+        if aggregated_response:
+            self.total_bus_invalidation_or_updates += 1
+            if aggregated_payload:
+                self.total_bus_traffic += aggregated_payload * 4
         return aggregated_response, aggregated_payload
 
     def send_lock_req(self, caller, address, lock):
@@ -99,4 +112,11 @@ class Bus:
             if cache != caller:
                 cache.lock_block(address, lock)
 
-
+    def check_share_line(self, caller, address):
+        blocks = []
+        for cache in self.connected_caches:
+            if cache != caller:
+                block = cache.get_cache_block(address)
+                if block is not None:
+                    blocks.append(block)
+        return blocks

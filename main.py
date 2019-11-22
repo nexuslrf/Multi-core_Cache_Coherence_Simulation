@@ -9,8 +9,8 @@ from components.processor import Processor
 import util
 
 
-def create_proc(i, protocol, **kwargs):
-    proc = Processor(i, **kwargs)
+def create_proc(i, protocol, limit, **kwargs):
+    proc = Processor(i, limit=limit, **kwargs)
     if protocol == 'mesi':
         proc.cache = MesiCache(name='P' + str(i), **kwargs)
     if protocol == 'dragon':
@@ -37,10 +37,11 @@ def create_opstream(data_name, num_cores):
 
 
 class Simulator:
-    def __init__(self, protocol='mesi', data='blackscholes_four', num_cores=4, memory_controller=MemoryController(),**kwargs):
+    def __init__(self, protocol='mesi', data='blackscholes_four', num_cores=4, memory_controller=MemoryController(),
+                 limit=0, **kwargs):
         self.memory_controller = memory_controller
         # setup processors with caches
-        self.procs = [create_proc(i, protocol, memory_controller=memory_controller, **kwargs) for i in range(num_cores)]
+        self.procs = [create_proc(i, protocol, memory_controller=memory_controller, limit=limit, **kwargs) for i in range(num_cores)]
         # setup op stream for each processor
         if data:
             for proc, opstream in zip(self.procs, create_opstream(data, num_cores)):
@@ -54,7 +55,7 @@ class Simulator:
     def run(self):
         while self.tick():
             for proc in self.procs:
-                if proc.done_job_counter % 1000 == 0 and proc.done_job_counter // 1000 > 0:
+                if proc.done_job_counter % 10000 == 0 and proc.done_job_counter // 10000 > 0:
                     print("{}: {} jobs done.".format(proc.cache.name, proc.done_job_counter))
             continue
 
@@ -99,6 +100,34 @@ class Simulator:
         return True
 
 
+def collect_statistics(sim:Simulator):
+    import pandas as pd
+    out_dir = './output'
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    stats = {}
+    stats['Overall Execution Cycle'] = sim.counter
+    stats['Bus Data Traffic'] = sim.bus.total_bus_traffic
+    stats['Bus Invalidation/Updates'] = sim.bus.total_bus_invalidation_or_updates
+    stats['Private Data Access Percentage'] = sum([x.cache.total_private_accesses for x in sim.procs])/sum([x.cache.total_access_count for x in sim.procs])
+    stats_df = pd.DataFrame.from_dict({'stats':stats})
+    stats_df.to_csv('./output/overall.csv')
+    print(stats_df)
+
+    stats_per_core = {}
+    for proc in sim.procs:
+        stats_per_core[proc.cache.name] = {
+            'Compute Cycles': proc.total_compute_cycles,
+            'Load/Store Instructions': proc.total_store_instructions + proc.total_load_instructions,
+            'Idle Cycles': proc.counter - proc.total_compute_cycles,
+            'Cache Miss Rate': round(proc.cache.cache_miss_count / proc.cache.total_access_count, 2)
+        }
+    stats_per_core_df = pd.DataFrame.from_dict(stats_per_core)
+    stats_per_core_df.to_csv('./output/percore.csv')
+    print(stats_per_core_df)
+
+
 if __name__ == '__main__':
-    sim = Simulator()
+    sim = Simulator(limit=1000)
     sim.run()
+    collect_statistics(sim)

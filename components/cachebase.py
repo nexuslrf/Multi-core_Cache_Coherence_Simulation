@@ -32,6 +32,10 @@ class CacheBase:
         self.bus = bus
 
         self.job = None
+        # statistics
+        self.total_access_count = 0
+        self.cache_miss_count = 0
+        self.total_private_accesses = 0
 
     def is_busy(self):
         return self.current_job is not None
@@ -51,6 +55,7 @@ class CacheBase:
                 return
 
     def schedule_job(self, job):
+        self.total_access_count += 1
         self.current_job = CacheJob.create_from_job(job, self.n)
 
     def interim(self):
@@ -78,7 +83,7 @@ class CacheBase:
                 block[2] = lock
                 return
 
-        raise LookupError("[lock_block] block not found in cache")
+        # raise LookupError("[lock_block] block not found in cache")
 
     def unlock_block(self, address):
         tag, set_index, offset = self.resolve_memory_address(address)
@@ -137,14 +142,14 @@ class CacheBase:
                 target_block = block
 
         if target_block is None:
-            self.evict_block(self.data[set_index][-1])
+            self.evict_block(self.data[set_index][-1], set_index)
             target_block = self.data[set_index][-1]
 
         target_block[0] = tag
         target_block[1] = state
         target_block[2] = WRITE_LOCKED
 
-    def evict_block(self, block):
+    def evict_block(self, block, set_index=0):
         pass
 
     def get_address_from_pieces(self, tag, cache_set_index, block_offset=0):
