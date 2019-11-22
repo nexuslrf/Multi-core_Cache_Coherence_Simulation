@@ -32,6 +32,7 @@ class CacheBase:
         self.bus = bus
 
         self.job = None
+        self.payload_words = 0
         # statistics
         self.total_access_count = 0
         self.cache_miss_count = 0
@@ -129,29 +130,39 @@ class CacheBase:
         for i in current_order:
             cache_set[i] = cache_set_temp[i]
 
-    def reserve_space_for_incoming_block(self, address, state):
+    def reserve_space_for_incoming_block(self, address):
         """
         find an available block slot for <address> in the corresponding cache_set, if the cache_set is full, i.e. all
         blocks are valid, then the least recently accessed block will be evicted. Once a slot is secured replace that
         slot with <address> block and write protect it by setting its lock bit to WRITE_LOCKED.
         :param address:
-        :return:
+        :return: True if resulting in block eviction, otherwise False
         """
         tag, set_index, offset = self.resolve_memory_address(address)
         target_block = None
+        need_eviction = False
         for block in self.data[set_index]:
+            if block[0] == tag:
+                target_block = block
+                break
             if block[1] == INVALID:
                 target_block = block
 
         if target_block is None:
-            self.evict_block(self.data[set_index][-1])
-            target_block = self.data[set_index][-1]
+            target_block = self.data[set_index][-1]  # set to the least recently accessed block
+            if target_block[1] == MODIFIED:
+                need_eviction = True
+                self.evict_block(self.data[set_index][-1])
+            target_block[1] = INVALID
 
         target_block[0] = tag
-        target_block[1] = state
         target_block[2] = WRITE_LOCKED
+        return need_eviction
 
     def evict_block(self, block):
+        self.memory_controller.evict_block(self, self.current_job.address)
+
+    def evict_block_passive(self, block):
         pass
 
     def get_address_from_pieces(self, tag, cache_set_index, block_offset=0):
