@@ -76,33 +76,48 @@ class MesiCache(CacheBase):
 
     def send_job_specific_bus_request(self):
         if self.current_job.type == LOAD:
-            result, payload_words = self.bus.send_read_req(self, self.current_job.address)
-            if not result:
-                self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
-            elif payload_words:  # result comes with payload, data will be supplied by one of other caches
-                self.reserve_space_for_incoming_block(self.current_job.address, SHARED)
+            result, self.payload_words = self.bus.send_read_req(self, self.current_job.address)
+        else:
+            result, self.payload_words = self.bus.send_read_X_req(self, self.current_job.address)
+
+        if not result:
+            self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
+            return
+
+        need_eviction = self.reserve_space_for_incoming_block(self.current_job.address)
+        if need_eviction:
+            self.current_job.status_in_cache = WAITING_FOR_MEMORY
+            return
+
+        self.proceed_with_bus_payload(self.payload_words)
+
+    def proceed_with_bus_payload(self, payload_words):
+        if self.current_job.type == LOAD:
+            if payload_words:
+                self.set_block_state(self.current_job.address, SHARED)
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
-                debug("{} start reading from Bus: {} cycles".format(self.name, self.current_job.remaining_bus_read_cycles))
-            else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
+                debug("{} start reading from Bus: {} cycles".format(self.name,
+                                                                    self.current_job.remaining_bus_read_cycles))
+            else:
+                self.set_block_state(self.current_job.address, EXCLUSIVE)
                 self.cache_miss_count += 1
                 self.bus.release_ownership(self)
-                self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
                 debug("{} start fetching from Mem: 100 cycles".format(self.name))
 
         if self.current_job.type == STORE:
-            result, payload_words = self.bus.send_read_X_req(self, self.current_job.address)
-            if not result:
-                self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
+            if self.get_cache_block(self.current_job.address) is not None:  # block is present, invalidation only
+                self.set_block_state(self.current_job.address, MODIFIED)
+                self.on_bus_read_finished()
             elif payload_words:  # result comes with payload, data will be supplied by one of other caches
-                self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
+                self.set_block_state(self.current_job.address, MODIFIED)
                 self.current_job.status_in_cache = RECEIVING_FROM_BUS
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
                 self.bus.release_ownership(self)
-                self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
+                self.set_block_state(self.current_job.address, MODIFIED)
                 self.memory_controller.fetch_block(self, self.current_job.address)
                 self.current_job.status_in_cache = WAITING_FOR_MEMORY
 
@@ -156,6 +171,9 @@ class MesiCache(CacheBase):
     def on_fetch_from_memory_finished(self):
         self.start_hitting()
 
+    def on_evict_to_memory_finished(self):
+        self.proceed_with_bus_payload(self.payload_words)
+
     def bus_read(self, address):
         """
 
@@ -173,7 +191,7 @@ class MesiCache(CacheBase):
                 block[1] = SHARED
                 return True, self.block_size//4
             if block[1] == MODIFIED:
-                self.evict_block(block)
+                self.evict_block_passive(block)
                 block[1] = SHARED
                 return True, self.block_size//4
 
@@ -191,7 +209,7 @@ class MesiCache(CacheBase):
                 block[1] = INVALID
                 return True, self.block_size // 4
             if block[1] == MODIFIED:
-                self.evict_block(block)
+                self.evict_block_passive(block)
                 block[1] = INVALID
                 return True, self.block_size // 4
 
