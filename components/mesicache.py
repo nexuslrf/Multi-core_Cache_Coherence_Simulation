@@ -23,29 +23,36 @@ class MesiCache(CacheBase):
         if self.current_job.status_in_cache == FRESH:
             self.handle_fresh_job(self.current_job)
 
+        if self.current_job.status_in_cache == BUS_OWNERSHIP_PENDING:
+            self.bus.apply_for_bus_master(self, self.bus_control_granted)
+
         if self.current_job.status_in_cache == OTHER_SIDE_BLOCKING:
             self.send_job_specific_bus_request()
 
     def handle_fresh_job(self, job):
+        local_hit = False
         if job.type == LOAD:
-            self.handle_proc_read(job)
+            local_hit = self.handle_proc_read(job)
         if job.type == STORE:
-            self.handle_proc_write(job)
+            local_hit = self.handle_proc_write(job)
+        if not local_hit:
+            self.current_job.status_in_cache = BUS_OWNERSHIP_PENDING
+            self.bus.apply_for_bus_master(self, self.bus_control_granted)
 
     def handle_proc_read(self, job):
         block = self.get_cache_block(job.address)
         if block is not None:
             self.start_hitting()
-            return
-        self.bus.apply_for_bus_master(self, self.bus_control_granted)
+            return True
+        return False
 
     def handle_proc_write(self, job):
         block = self.get_cache_block(job.address)
         if block is not None:
             if block[1] in [MODIFIED, EXCLUSIVE]:
                 self.start_hitting()
-                return
-        self.bus.apply_for_bus_master(self, self.bus_control_granted)
+                return True
+        return False
 
     def bus_control_granted(self, result):
         if result:  # bus ownership granted
@@ -78,6 +85,7 @@ class MesiCache(CacheBase):
                 self.current_job.remaining_bus_read_cycles = payload_words * 2
                 debug("{} start reading from Bus: {} cycles".format(self.name, self.current_job.remaining_bus_read_cycles))
             else:  # result comes without payload, other caches do not have copy, therefore fetch from memory
+                self.cache_miss_count += 1
                 self.bus.release_ownership(self)
                 self.reserve_space_for_incoming_block(self.current_job.address, EXCLUSIVE)
                 self.memory_controller.fetch_block(self, self.current_job.address)
@@ -112,6 +120,10 @@ class MesiCache(CacheBase):
         if self.current_job.type == STORE:
             self.lock_block(self.current_job.address, WRITE_LOCKED)
         self.current_job.status_in_cache = HITTING
+
+        # statistics record
+        if self.get_cache_block(self.current_job.address)[1] != SHARED:
+            self.total_private_accesses += 1
 
     def on_hit_finished(self):
         if self.current_job.type == STORE:

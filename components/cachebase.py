@@ -32,6 +32,10 @@ class CacheBase:
         self.bus = bus
 
         self.job = None
+        # statistics
+        self.total_access_count = 0
+        self.cache_miss_count = 0
+        self.total_private_accesses = 0
 
     def is_busy(self):
         return self.current_job is not None
@@ -51,6 +55,7 @@ class CacheBase:
                 return
 
     def schedule_job(self, job):
+        self.total_access_count += 1
         self.current_job = CacheJob.create_from_job(job, self.n)
 
     def interim(self):
