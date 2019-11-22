@@ -163,8 +163,8 @@ class CacheBase:
     def evict_block(self, block):
         self.memory_controller.evict_block(self, self.current_job.address)
 
-    def evict_block_passive(self, block):
-        pass
+    def evict_block_passive(self, address):
+        self.memory_controller.evict_block(self, address)
 
     def get_address_from_pieces(self, tag, cache_set_index, block_offset=0):
         address = block_offset

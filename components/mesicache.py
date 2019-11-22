@@ -76,16 +76,17 @@ class MesiCache(CacheBase):
 
     def send_job_specific_bus_request(self):
         if self.current_job.type == LOAD:
-            result, self.payload_words = self.bus.send_read_req(self, self.current_job.address)
+            result, self.payload_words, mem_wait_passive = self.bus.send_read_req(self, self.current_job.address)
         else:
-            result, self.payload_words = self.bus.send_read_X_req(self, self.current_job.address)
+            result, self.payload_words, mem_wait_passive = self.bus.send_read_X_req(self, self.current_job.address)
 
         if not result:
             self.current_job.status_in_cache = OTHER_SIDE_BLOCKING
             return
 
-        need_eviction = self.reserve_space_for_incoming_block(self.current_job.address)
-        if need_eviction:
+        mem_wait = self.reserve_space_for_incoming_block(self.current_job.address)
+
+        if mem_wait or mem_wait_passive:
             self.current_job.status_in_cache = WAITING_FOR_MEMORY
             return
 
@@ -172,6 +173,7 @@ class MesiCache(CacheBase):
         self.start_hitting()
 
     def on_evict_to_memory_finished(self):
+
         self.proceed_with_bus_payload(self.payload_words)
 
     def bus_read(self, address):
@@ -182,35 +184,37 @@ class MesiCache(CacheBase):
         Int value is the payload size if the block is available and ready to be transmitted, or 0 if block not found.
         """
         block = self.get_cache_block(address)
+        mem_op = False
         if block is not None:
             if block[2] > READ_LOCKED:
-                return False, 0
+                return False, 0, mem_op
             if block[1] == SHARED:
-                return True, self.block_size//4
+                return True, self.block_size//4, mem_op
             if block[1] == EXCLUSIVE:
                 block[1] = SHARED
-                return True, self.block_size//4
+                return True, self.block_size//4, mem_op
             if block[1] == MODIFIED:
-                self.evict_block_passive(block)
+                mem_op = True
                 block[1] = SHARED
-                return True, self.block_size//4
+                return True, self.block_size//4, mem_op
 
-        return True, 0
+        return True, 0, mem_op
 
     def bus_readx(self, address):
         block = self.get_cache_block(address)
+        mem_op = False
         if block is not None:
             if block[2] > UNLOCKED:
-                return False, 0
+                return False, 0, mem_op
             if block[1] == SHARED:
                 block[1] = INVALID
-                return True, self.block_size // 4
+                return True, self.block_size // 4, mem_op
             if block[1] == EXCLUSIVE:
                 block[1] = INVALID
-                return True, self.block_size // 4
+                return True, self.block_size // 4, mem_op
             if block[1] == MODIFIED:
-                self.evict_block_passive(block)
                 block[1] = INVALID
-                return True, self.block_size // 4
+                mem_op = True
+                return True, self.block_size // 4, mem_op
 
-        return True, 0
+        return True, 0, mem_op

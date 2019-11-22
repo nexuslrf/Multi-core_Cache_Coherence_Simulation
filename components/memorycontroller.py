@@ -4,10 +4,16 @@ class MemoryController:
         self.storing = {}
 
     def fetch_block(self, requester, address):
-        self.loading[requester] = 100
+        if requester in self.loading:
+            self.loading[requester] += 100
+        else:
+            self.loading[requester] = 100
 
     def evict_block(self, requester, address):
-        self.storing[requester] = 100
+        if requester in self.storing:
+            self.storing[requester] += 100
+        else:
+            self.storing[requester] = 100
 
     def tick(self):
         remove_list = []

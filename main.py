@@ -4,6 +4,7 @@ from components.dragoncache import DragonCache
 from components.memorycontroller import MemoryController
 from components.mesibus import Bus
 from components.mesicache import MesiCache
+from components.moesicache import MoesiCache
 from opstream import OpStream
 from components.processor import Processor
 import util
@@ -14,7 +15,9 @@ def create_proc(i, protocol, limit, **kwargs):
     proc = Processor(i, limit=limit, **kwargs)
     if protocol == 'MESI':
         proc.cache = MesiCache(name='P' + str(i), **kwargs)
-    if protocol == 'DRAGON':
+    elif protocol == 'MOESI':
+        proc.cache = MoesiCache(name='P' + str(i), **kwargs)
+    elif protocol == 'DRAGON':
         proc.cache = DragonCache(name='P' + str(i), **kwargs)
     return proc
 
@@ -132,6 +135,6 @@ def collect_statistics(sim:Simulator):
 if __name__ == '__main__':
     sim = Simulator(protocol=args.protocol, data=args.input_file,
                     block_size=args.block_size, assoc=args.associativity,
-                    size=args.cache_size)
+                    size=args.cache_size, limit=6000)
     sim.run()
     collect_statistics(sim)

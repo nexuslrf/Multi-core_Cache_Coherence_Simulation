@@ -54,16 +54,19 @@ class Bus:
 
         aggregated_payload = 0
         aggregated_response = True
+        wait_mem = False
         for cache in self.connected_caches:
             if cache != caller:
-                response, payload_words = cache.bus_read(address)
+                response, payload_words, mem_op = cache.bus_read(address)
                 aggregated_response = aggregated_response and response
+                wait_mem = wait_mem or mem_op
                 if payload_words:
                     aggregated_payload = payload_words
-
+        if wait_mem:
+            caller.evict_block_passive(address)
         if aggregated_response and aggregated_payload:
                 self.total_bus_traffic += aggregated_payload * 4
-        return aggregated_response, aggregated_payload
+        return aggregated_response, aggregated_payload, wait_mem
 
     def send_read_X_req(self, caller, address):
         if caller != self.bus_master:
@@ -72,18 +75,24 @@ class Bus:
 
         aggregated_payload = 0
         aggregated_response = True
+        wait_mem = False
         for cache in self.connected_caches:
             if cache != caller:
-                response, payload_words = cache.bus_readx(address)
+                response, payload_words, mem_op = cache.bus_readx(address)
                 aggregated_response = aggregated_response and response
+                wait_mem = wait_mem or wait_mem
                 if payload_words:
                     aggregated_payload = payload_words
+
+        if wait_mem:
+            caller.evict_block_passive(address)
 
         if aggregated_response:
             self.total_bus_invalidation_or_updates += 1
             if aggregated_payload:
                 self.total_bus_traffic += aggregated_payload * 4
-        return aggregated_response, aggregated_payload
+
+        return aggregated_response, aggregated_payload, wait_mem
 
     # for Dragon
     def send_update_req(self, caller, address):
