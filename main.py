@@ -18,7 +18,7 @@ def create_proc(i, protocol, limit, **kwargs):
     elif protocol == 'MOESI':
         proc.cache = MoesiCache(name='P' + str(i), **kwargs)
     elif protocol == 'DRAGON':
-        proc.cache = DragonCache(name='P' + str(i), **kwargs)
+        proc.cache = DragonCache(name='P' + str(i), bus_mem_op=args.bus_mem_op,  **kwargs)
     return proc
 
 

@@ -12,8 +12,9 @@ from util import resolve_memory_address, debug
 # tt = 0
 
 class DragonCache(CacheBase):
-    def __init__(self, name, size=4096, assoc=2, block_size=32, memory_controller=None, bus=None):
+    def __init__(self, name, size=4096, assoc=2, block_size=32, memory_controller=None, bus=None, bus_mem_op=False):
         super().__init__(name, size, assoc, block_size, memory_controller, bus)
+        self.bus_mem_op = bus_mem_op
 
     def interim(self):
         # run interim stuff if there is a current job
@@ -175,12 +176,14 @@ class DragonCache(CacheBase):
                 return True, self.block_size//4, mem_op
             elif block[1] == M:
                 # self.evict_block_passive(block)
-                mem_op = True
+                if self.bus_mem_op:
+                    mem_op = True
                 block[1] = SM
                 return True, self.block_size//4, mem_op
             elif block[1] == SM:
                 # self.evict_block_passive(block)
-                mem_op = True
+                if self.bus_mem_op:
+                    mem_op = True
                 return True, self.block_size // 4, mem_op
 
         return True, 0, mem_op
