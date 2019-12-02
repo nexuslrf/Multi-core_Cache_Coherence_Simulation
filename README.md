@@ -46,7 +46,7 @@ There are three protocols in our implementations:
 
 * Sample Output
 
-![A screenshot of a cell phone  Description automatically generated](file:////Users/g117e1800098/Library/Group%20Containers/UBF8T346G9.Office/TemporaryItems/msohtmlclip/clip_image002.png)
+![A screenshot of a cell phone  Description automatically generated](./figs/demo.png)
 
 ## Evaluation:
 
