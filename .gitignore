@@ -109,3 +109,6 @@ venv.bak/
 # pycharm
 .idea
 data
+components/Problems.md
+output/overall.csv
+output/percore.csv
